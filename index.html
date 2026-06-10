@@ -248,22 +248,42 @@ function load(key, fallback){ try{ const v = localStorage.getItem(key); return v
 
 /* ---------- Gluten-Logik ---------- */
 const HARD_GLUTEN = ["weizen","gerste","roggen","dinkel","grünkern","kamut","einkorn","emmer",
-  "bulgur","couscous","seitan","graupen","malz","gerstenmalz","weizenmehl","roggenmehl",
-  "dinkelmehl","weizenstärke","wheat","barley","rye","spelt"];
-const SOFT_GLUTEN = ["hafer","oat"];
+  "bulgur","couscous","seitan","graupen","malz","weizenmehl","roggenmehl",
+  "dinkelmehl","weizenstärke","grieß","gries","triticale",
+  /* Englisch */ "wheat","barley","rye","spelt","semolina","durum",
+  /* Französisch */ "blé","froment","orge","seigle","épeautre",
+  /* Italienisch */ "frumento","orzo","segale","farro","semola",
+  /* Spanisch */ "trigo","cebada","centeno"];
+const HARD_EXCEPT = ["buchweizengrieß","buchweizengries","buchweizen","trigo sarraceno",
+  "maisgrieß","maisgries","reisgrieß","reisgries",
+  "maltodextrin","maltose","maltit","glutenfrei","gluten-free","sans gluten","senza glutine","sin gluten"];
+const SOFT_GLUTEN = ["hafer","oat","avoine","avena"];
+/* Kanonische Zutaten-IDs der Datenbank (sprachunabhängig) */
+const TAG_GLUTEN_RE = /(wheat|barley|rye|spelt|kamut|triticale|durum|semolina|couscous|bulgur|einkorn|emmer|seitan|malt(?!odextrin|ose|itol))/;
+const TAG_EXCEPT_RE = /(corn|maize|rice|buckwheat|gluten-free)/;
+
+function findHardHits(ingr){
+  /* Ausnahmen (z. B. Maisgrieß, Maltodextrin, „glutenfrei“-Hinweise) vor der Prüfung entfernen */
+  let t = ingr;
+  HARD_EXCEPT.forEach(w => { t = t.split(w).join(" "); });
+  return HARD_GLUTEN.filter(w => t.includes(w));
+}
 
 function evaluateGluten(p){
-  const allerg  = (p.allergens_tags||[]).map(s=>s.toLowerCase());
+  const allerg  = (p.allergens_tags||[]).concat(p.allergens_hierarchy||[]).map(s=>s.toLowerCase());
   const traces  = (p.traces_tags||[]).map(s=>s.toLowerCase());
   const labels  = (p.labels_tags||[]).map(s=>s.toLowerCase());
+  const iTags   = (p.ingredients_tags||[]).map(s=>s.toLowerCase());
   const ingr    = ((p.ingredients_text_de || p.ingredients_text || "")+"").toLowerCase();
 
   const labelFree   = labels.some(t => t.includes("gluten-free") || t.includes("no-gluten") || t.includes("glutenfrei"));
   const allergGluten= allerg.some(t => t.includes("gluten"));
   const traceGluten = traces.some(t => t.includes("gluten"));
   const ingrClaimsFree = ingr.includes("glutenfrei") || ingr.includes("gluten-free");
-  const hardHits = HARD_GLUTEN.filter(w => ingr.includes(w));
+  const hardHits = findHardHits(ingr);
+  const tagHits  = iTags.filter(t => TAG_GLUTEN_RE.test(t) && !TAG_EXCEPT_RE.test(t));
   const softHits = SOFT_GLUTEN.filter(w => ingr.includes(w));
+  const anyGlutenSource = allergGluten || hardHits.length > 0 || tagHits.length > 0;
 
   const reasons = [];
 
@@ -278,10 +298,16 @@ function evaluateGluten(p){
     reasons.push("Sicherheitshalber das Glutenfrei-Symbol auf der Verpackung kurz gegenchecken.");
     return {level:"green", title:"Als glutenfrei gekennzeichnet", text:"Laut Datenbank für Zöliakie geeignet.", reasons};
   }
-  if (allergGluten || (hardHits.length && !ingrClaimsFree)){
+  if (anyGlutenSource && !ingrClaimsFree){
     if (allergGluten) reasons.push("Gluten ist als Allergen hinterlegt.");
-    if (hardHits.length) reasons.push("Glutenhaltige Zutat(en) gefunden: " + hardHits.slice(0,4).join(", ") + ".");
+    if (hardHits.length) reasons.push("Glutenhaltige Zutat(en) in der Zutatenliste: " + hardHits.slice(0,4).join(", ") + ".");
+    if (!hardHits.length && tagHits.length) reasons.push("Die strukturierte Zutatenanalyse der Datenbank meldet glutenhaltiges Getreide.");
     return {level:"red", title:"Enthält Gluten", text:"Bei Zöliakie nicht geeignet.", reasons};
+  }
+  if (anyGlutenSource && ingrClaimsFree){
+    reasons.push("Die Zutaten nennen glutenhaltiges Getreide, gleichzeitig steht ein „glutenfrei“-Hinweis im Text.");
+    reasons.push("Bitte Verpackung prüfen – verlässlich ist nur das offizielle Glutenfrei-Symbol (durchgestrichene Ähre).");
+    return {level:"amber", title:"Widersprüchliche Angaben", text:"Verpackung prüfen.", reasons};
   }
   if (traceGluten || softHits.length){
     if (traceGluten) reasons.push("„Kann Spuren von Gluten enthalten“ ist hinterlegt.");
@@ -414,8 +440,8 @@ async function lookup(code){
   setStatus("Suche Produkt " + code + " …");
   $("result").style.display = "none";
   try{
-    const fields = "product_name,brands,quantity,allergens_tags,traces_tags,labels_tags,"+
-      "ingredients_text_de,ingredients_text,nutriments,image_front_small_url";
+    const fields = "product_name,brands,quantity,allergens_tags,allergens_hierarchy,traces_tags,labels_tags,"+
+      "ingredients_tags,ingredients_text_de,ingredients_text,nutriments,image_front_small_url";
     const res = await fetch("https://world.openfoodfacts.org/api/v2/product/"+code+"?fields="+fields);
     const data = await res.json();
     if (data.status !== 1 || !data.product){
