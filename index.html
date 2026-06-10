@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&display=swap" rel="stylesheet">
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<!-- Barcode-Erkennung: nativer BarcodeDetector oder ZBar-WASM-Polyfill (wird bei Bedarf geladen) -->
 
 <style>
 :root{
@@ -65,8 +65,11 @@ header{display:flex;align-items:baseline;justify-content:space-between;padding:8
   width:100%;border:1.5px solid rgba(255,255,255,.4);border-radius:12px;padding:12px;margin-top:10px;
   font-weight:600;font-size:15px;background:transparent;color:#fff;cursor:pointer;display:none;
 }
-#reader{margin-top:14px;border-radius:12px;overflow:hidden;display:none}
-#reader video{border-radius:12px}
+#scanbox{position:relative;margin-top:14px;border-radius:12px;overflow:hidden;display:none;background:#000}
+#scanbox video{width:100%;display:block}
+#scanbox .frame{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:80%;height:42%;border:2.5px solid rgba(255,255,255,.95);border-radius:10px;box-shadow:0 0 0 2000px rgba(0,0,0,.35)}
+#scanbox .line{position:absolute;left:13%;right:13%;top:50%;height:2px;background:#FF5252;border-radius:2px;animation:scanline 1.4s ease-in-out infinite}
+@keyframes scanline{0%,100%{transform:translateY(-30px)}50%{transform:translateY(30px)}}
 
 .manual{display:flex;gap:8px;margin-top:12px}
 .manual input{
@@ -163,7 +166,11 @@ footer{font-size:11px;color:var(--muted);line-height:1.6;padding:22px 6px 0;text
     <p>Barcode mit der Kamera scannen oder die Nummer unter dem Strichcode eintippen.</p>
     <button id="btn-scan">📷&ensp;Barcode scannen</button>
     <button id="btn-stop">Scanner beenden</button>
-    <div id="reader"></div>
+    <div id="scanbox">
+      <video id="cam" playsinline muted autoplay></video>
+      <div class="frame"></div>
+      <div class="line"></div>
+    </div>
     <div class="manual">
       <input id="manual-code" type="text" inputmode="numeric" placeholder="z. B. 4311501045633" enterkeyhint="search">
       <button id="btn-manual">Suchen</button>
@@ -424,50 +431,65 @@ async function lookup(code){
 $("btn-manual").addEventListener("click", ()=> lookup($("manual-code").value));
 $("manual-code").addEventListener("keydown", e => { if (e.key === "Enter") lookup(e.target.value); });
 
-/* ---------- Scanner ---------- */
-let scanner = null;
-let scanning = false;
+/* ---------- Scanner: nativer BarcodeDetector oder ZBar-WASM ---------- */
+const FORMATS = ["ean_13","ean_8","upc_a","upc_e","code_128"];
+const video = $("cam");
+let stream = null, detector = null, scanning = false, loopId = null;
+
+async function ensureDetector(){
+  if (detector) return detector;
+  try{
+    if ("BarcodeDetector" in window){
+      const sup = await window.BarcodeDetector.getSupportedFormats();
+      if (sup.includes("ean_13")){
+        detector = new window.BarcodeDetector({ formats: FORMATS.filter(f => sup.includes(f)) });
+        return detector;
+      }
+    }
+  }catch(e){}
+  /* Fallback: ZBar als WebAssembly – schnell und treffsicher bei EAN-Codes */
+  const mod = await import("https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/main.js");
+  detector = new mod.BarcodeDetectorPolyfill({ formats: FORMATS });
+  return detector;
+}
+
+async function scanLoop(){
+  if (!scanning) return;
+  try{
+    if (video.readyState >= 2){
+      const codes = await detector.detect(video);
+      if (codes && codes.length){
+        const val = (codes[0].rawValue || "").trim();
+        if (/^\d{6,14}$/.test(val)){
+          await stopScanner();
+          lookup(val);
+          return;
+        }
+      }
+    }
+  }catch(e){ /* einzelne Fehlversuche ignorieren */ }
+  loopId = setTimeout(scanLoop, 110);
+}
 
 async function startScanner(){
   if (scanning) return;
-  $("reader").style.display = "block";
-  $("btn-stop").style.display = "block";
   $("btn-scan").textContent = "Kamera startet …";
   try{
-    scanner = new Html5Qrcode("reader", {
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.CODE_128
-      ],
-      /* nutzt – falls vom iPhone unterstützt – den nativen Barcode-Erkenner (deutlich treffsicherer) */
-      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-      verbose: false
+    await ensureDetector();
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
     });
-    await scanner.start(
-      { facingMode: "environment" },
-      {
-        fps: 15,
-        qrbox: (vw, vh) => ({ width: Math.min(Math.floor(vw * 0.85), 340), height: 170 }),
-        aspectRatio: 1.333,
-        videoConstraints: {
-          facingMode: "environment",
-          width:  { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      },
-      (decoded) => { stopScanner(); lookup(decoded); },
-      () => {} /* einzelne Fehlversuche ignorieren */
-    );
+    video.srcObject = stream;
+    await video.play();
+    $("scanbox").style.display = "block";
+    $("btn-stop").style.display = "block";
     scanning = true;
     $("btn-scan").textContent = "📷 Scanner läuft …";
-    setStatus("Barcode ruhig in den Rahmen halten, Abstand ca. 10–15 cm. Bei Unschärfe Abstand leicht verändern.");
+    setStatus("Barcode in den Rahmen halten, Abstand ca. 10–15 cm.");
+    scanLoop();
   }catch(err){
-    $("reader").style.display = "none";
-    $("btn-stop").style.display = "none";
-    $("btn-scan").textContent = "📷 Barcode scannen";
+    await stopScanner();
     const name = err && err.name ? err.name : "";
     if (name === "NotAllowedError" || /permission|denied/i.test(String(err))){
       setStatus("Der Kamerazugriff wurde blockiert. Bitte erlauben: In Safari auf „aA“ links in der Adressleiste tippen → „Website-Einstellungen“ → Kamera → „Erlauben“. Oder unter iOS-Einstellungen → Apps → Safari → Kamera → „Fragen“ wählen. Danach Seite neu laden.");
@@ -478,12 +500,13 @@ async function startScanner(){
     }
   }
 }
+
 async function stopScanner(){
-  if (scanner && scanning){
-    try{ await scanner.stop(); scanner.clear(); }catch(e){}
-  }
   scanning = false;
-  $("reader").style.display = "none";
+  if (loopId){ clearTimeout(loopId); loopId = null; }
+  if (stream){ try{ stream.getTracks().forEach(t => t.stop()); }catch(e){} stream = null; }
+  video.srcObject = null;
+  $("scanbox").style.display = "none";
   $("btn-stop").style.display = "none";
   $("btn-scan").textContent = "📷 Barcode scannen";
   setStatus("");
