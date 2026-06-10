@@ -1,0 +1,12 @@
+{
+  "name": "EssCheck – Gluten-Ampel & BE-Rechner",
+  "short_name": "EssCheck",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#10221B",
+  "theme_color": "#10221B",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

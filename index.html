@@ -10,7 +10,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EssCheck">
 <meta name="theme-color" content="#10221B">
-<link rel="manifest" href='data:application/manifest+json,{"name":"EssCheck","short_name":"EssCheck","display":"standalone","background_color":"%2310221B","theme_color":"%2310221B","start_url":"."}'>
+<link rel="apple-touch-icon" href="./icon.png">
+<link rel="icon" type="image/png" href="./icon.png">
+<link rel="manifest" href="./manifest.webmanifest">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -539,6 +541,13 @@ async function stopScanner(){
 }
 $("btn-scan").addEventListener("click", startScanner);
 $("btn-stop").addEventListener("click", stopScanner);
+
+/* ---------- Offline-Start (Service Worker) ---------- */
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  });
+}
 
 })();
 </script>
