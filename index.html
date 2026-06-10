@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>EssCheck – Gluten-Ampel & BE-Rechner</title>
+
+<!-- PWA / iOS Home-Bildschirm -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EssCheck">
+<meta name="theme-color" content="#10221B">
+<link rel="manifest" href='data:application/manifest+json,{"name":"EssCheck","short_name":"EssCheck","display":"standalone","background_color":"%2310221B","theme_color":"%2310221B","start_url":"."}'>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+:root{
+  --ink:#14201A;
+  --paper:#F2F4F0;
+  --card:#FFFFFF;
+  --line:#14201A;
+  --muted:#5C6B62;
+  --green:#1E7F4C;
+  --green-soft:#E2F2E8;
+  --amber:#B26A00;
+  --amber-soft:#FBEFD9;
+  --red:#BB2D2D;
+  --red-soft:#F9E3E3;
+  --gray:#5C6B62;
+  --gray-soft:#E8ECE9;
+  --accent:#10221B;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.wrap{max-width:480px;margin:0 auto;padding:16px 16px 48px}
+
+/* Kopf */
+header{display:flex;align-items:baseline;justify-content:space-between;padding:8px 2px 18px}
+.wordmark{font-family:'Archivo',sans-serif;font-weight:900;font-size:26px;letter-spacing:-0.5px}
+.wordmark .dot{color:var(--green)}
+.tagline{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px}
+
+/* Scan-Bereich */
+.scan-card{background:var(--accent);border-radius:18px;padding:20px;color:#fff;margin-bottom:14px}
+.scan-card h2{font-family:'Archivo',sans-serif;font-weight:700;font-size:16px;margin-bottom:4px}
+.scan-card p{font-size:13px;color:#B9C7BF;margin-bottom:14px}
+#btn-scan{
+  width:100%;border:none;border-radius:12px;padding:16px;
+  font-family:'Archivo',sans-serif;font-weight:700;font-size:17px;
+  background:#fff;color:var(--accent);cursor:pointer;
+}
+#btn-scan:active{transform:scale(.98)}
+#btn-stop{
+  width:100%;border:1.5px solid rgba(255,255,255,.4);border-radius:12px;padding:12px;margin-top:10px;
+  font-weight:600;font-size:15px;background:transparent;color:#fff;cursor:pointer;display:none;
+}
+#reader{margin-top:14px;border-radius:12px;overflow:hidden;display:none}
+#reader video{border-radius:12px}
+
+.manual{display:flex;gap:8px;margin-top:12px}
+.manual input{
+  flex:1;border:none;border-radius:10px;padding:13px 14px;font-size:16px;
+  background:rgba(255,255,255,.12);color:#fff;
+}
+.manual input::placeholder{color:#8FA098}
+.manual button{
+  border:none;border-radius:10px;padding:0 18px;font-weight:700;font-size:15px;
+  background:rgba(255,255,255,.18);color:#fff;cursor:pointer;
+}
+
+/* Status / Laden */
+#status{font-size:14px;color:var(--muted);text-align:center;padding:10px;display:none}
+
+/* Ergebnis */
+.result{display:none;margin-top:6px}
+.verdict{
+  border-radius:16px;padding:18px;display:flex;gap:14px;align-items:center;margin-bottom:14px;
+}
+.verdict .icon{
+  width:46px;height:46px;border-radius:50%;flex:none;
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;font-weight:900;color:#fff;font-family:'Archivo',sans-serif;
+}
+.verdict h3{font-family:'Archivo',sans-serif;font-size:18px;font-weight:900;line-height:1.2}
+.verdict p{font-size:13px;margin-top:3px;line-height:1.45}
+.v-green{background:var(--green-soft)} .v-green .icon{background:var(--green)} .v-green h3{color:var(--green)}
+.v-amber{background:var(--amber-soft)} .v-amber .icon{background:var(--amber)} .v-amber h3{color:var(--amber)}
+.v-red{background:var(--red-soft)}     .v-red .icon{background:var(--red)}     .v-red h3{color:var(--red)}
+.v-gray{background:var(--gray-soft)}   .v-gray .icon{background:var(--gray)}   .v-gray h3{color:var(--gray)}
+
+.product{
+  background:var(--card);border-radius:16px;padding:18px;margin-bottom:14px;
+  display:flex;gap:14px;align-items:center;
+}
+.product img{width:64px;height:64px;object-fit:contain;border-radius:8px;background:#F5F5F2;flex:none}
+.product .name{font-family:'Archivo',sans-serif;font-weight:700;font-size:16px;line-height:1.25}
+.product .brand{font-size:13px;color:var(--muted);margin-top:2px}
+.product .code{font-size:11px;color:var(--muted);margin-top:4px;letter-spacing:.5px}
+
+.reasons{background:var(--card);border-radius:16px;padding:16px 18px;margin-bottom:14px}
+.reasons h4, .nutri h4, .portion h4, .history h4{
+  font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:10px;
+  font-weight:700;
+}
+.reasons li{font-size:14px;line-height:1.5;margin:6px 0 6px 18px}
+
+/* Nährwerttabelle im Stil der amtlichen Tabelle */
+.nutri{background:var(--card);border-radius:16px;padding:16px 18px;margin-bottom:14px}
+.nutri table{width:100%;border-collapse:collapse;border-top:3px solid var(--line)}
+.nutri td{padding:8px 2px;font-size:14px;border-bottom:1px solid #D8DDD8}
+.nutri td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.nutri tr.sub td:first-child{padding-left:16px;color:var(--muted)}
+.nutri tr.hl td{background:var(--green-soft)}
+.nutri .unit{font-size:12px;color:var(--muted);font-weight:400}
+
+/* Portionsrechner */
+.portion{background:var(--card);border-radius:16px;padding:16px 18px;margin-bottom:14px}
+.portion .row{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.portion input{
+  width:90px;border:1.5px solid #C8CFC9;border-radius:10px;padding:10px;font-size:16px;text-align:center;
+}
+.portion .row span{font-size:14px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.kpi{background:var(--paper);border-radius:12px;padding:12px;text-align:center}
+.kpi b{display:block;font-family:'Archivo',sans-serif;font-size:20px;font-weight:900}
+.kpi span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+
+/* Verlauf */
+.history{background:var(--card);border-radius:16px;padding:16px 18px;margin-top:6px}
+.h-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #ECEFEC;cursor:pointer}
+.h-item:last-child{border-bottom:none}
+.h-dot{width:12px;height:12px;border-radius:50%;flex:none}
+.h-item .n{font-size:14px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-item .c{font-size:11px;color:var(--muted)}
+.h-empty{font-size:13px;color:var(--muted)}
+
+footer{font-size:11px;color:var(--muted);line-height:1.6;padding:22px 6px 0;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="wordmark">EssCheck<span class="dot">.</span></div>
+      <div class="tagline">Gluten-Ampel · Kohlenhydrate · BE/KE</div>
+    </div>
+  </header>
+
+  <section class="scan-card">
+    <h2>Produkt prüfen</h2>
+    <p>Barcode mit der Kamera scannen oder die Nummer unter dem Strichcode eintippen.</p>
+    <button id="btn-scan">📷&ensp;Barcode scannen</button>
+    <button id="btn-stop">Scanner beenden</button>
+    <div id="reader"></div>
+    <div class="manual">
+      <input id="manual-code" type="text" inputmode="numeric" placeholder="z. B. 4311501045633" enterkeyhint="search">
+      <button id="btn-manual">Suchen</button>
+    </div>
+  </section>
+
+  <div id="status"></div>
+
+  <section class="result" id="result">
+    <div class="verdict" id="verdict">
+      <div class="icon" id="verdict-icon">?</div>
+      <div>
+        <h3 id="verdict-title"></h3>
+        <p id="verdict-text"></p>
+      </div>
+    </div>
+
+    <div class="product" id="product-card">
+      <img id="p-img" alt="" hidden>
+      <div>
+        <div class="name" id="p-name"></div>
+        <div class="brand" id="p-brand"></div>
+        <div class="code" id="p-code"></div>
+      </div>
+    </div>
+
+    <div class="reasons" id="reasons-card">
+      <h4>Begründung</h4>
+      <ul id="reasons"></ul>
+    </div>
+
+    <div class="nutri" id="nutri-card">
+      <h4>Nährwerte <span class="unit">je 100 g</span></h4>
+      <table id="nutri-table"></table>
+    </div>
+
+    <div class="portion" id="portion-card">
+      <h4>Portionsrechner für Diabetiker</h4>
+      <div class="row">
+        <span>Portion:</span>
+        <input id="portion-g" type="number" inputmode="numeric" value="100" min="1" max="2000">
+        <span>Gramm</span>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><b id="k-kh">–</b><span>g Kohlenh.</span></div>
+        <div class="kpi"><b id="k-be">–</b><span>BE (÷12)</span></div>
+        <div class="kpi"><b id="k-ke">–</b><span>KE (÷10)</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="history">
+    <h4>Zuletzt gescannt</h4>
+    <div id="history-list"><div class="h-empty">Noch keine Scans. Leg los!</div></div>
+  </section>
+
+  <footer>
+    Datenquelle: Open Food Facts (Community-Datenbank). Angaben können unvollständig oder veraltet sein.
+    Diese App ersetzt keine medizinische Beratung – bei Zöliakie im Zweifel immer die Zutatenliste
+    auf der Verpackung prüfen.
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- Hilfen ---------- */
+const $ = id => document.getElementById(id);
+const statusEl = $("status");
+function setStatus(msg){ statusEl.textContent = msg; statusEl.style.display = msg ? "block" : "none"; }
+
+function store(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+function load(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } }
+
+/* ---------- Gluten-Logik ---------- */
+const HARD_GLUTEN = ["weizen","gerste","roggen","dinkel","grünkern","kamut","einkorn","emmer",
+  "bulgur","couscous","seitan","graupen","malz","gerstenmalz","weizenmehl","roggenmehl",
+  "dinkelmehl","weizenstärke","wheat","barley","rye","spelt"];
+const SOFT_GLUTEN = ["hafer","oat"];
+
+function evaluateGluten(p){
+  const allerg  = (p.allergens_tags||[]).map(s=>s.toLowerCase());
+  const traces  = (p.traces_tags||[]).map(s=>s.toLowerCase());
+  const labels  = (p.labels_tags||[]).map(s=>s.toLowerCase());
+  const ingr    = ((p.ingredients_text_de || p.ingredients_text || "")+"").toLowerCase();
+
+  const labelFree   = labels.some(t => t.includes("gluten-free") || t.includes("no-gluten") || t.includes("glutenfrei"));
+  const allergGluten= allerg.some(t => t.includes("gluten"));
+  const traceGluten = traces.some(t => t.includes("gluten"));
+  const ingrClaimsFree = ingr.includes("glutenfrei") || ingr.includes("gluten-free");
+  const hardHits = HARD_GLUTEN.filter(w => ingr.includes(w));
+  const softHits = SOFT_GLUTEN.filter(w => ingr.includes(w));
+
+  const reasons = [];
+
+  if (labelFree && allergGluten){
+    reasons.push("Das Produkt trägt ein Glutenfrei-Label, in den Allergenen ist aber Gluten vermerkt (z. B. glutenfreie Weizenstärke – oder ein Datenfehler).");
+    reasons.push("Bitte unbedingt die Verpackung prüfen: Nur das durchgestrichene Ährensymbol bzw. der Aufdruck „glutenfrei“ zählt.");
+    return {level:"amber", title:"Widersprüchliche Angaben", text:"Verpackung prüfen, bevor es in den Einkaufswagen wandert.", reasons};
+  }
+  if (labelFree){
+    reasons.push("Das Produkt ist in der Datenbank als „glutenfrei“ gekennzeichnet.");
+    if (hardHits.length) reasons.push("Hinweis: Die Zutatenliste nennt „" + hardHits[0] + "“ – bei zertifiziert glutenfreien Produkten ist das z. B. als glutenfreie Weizenstärke zulässig.");
+    reasons.push("Sicherheitshalber das Glutenfrei-Symbol auf der Verpackung kurz gegenchecken.");
+    return {level:"green", title:"Als glutenfrei gekennzeichnet", text:"Laut Datenbank für Zöliakie geeignet.", reasons};
+  }
+  if (allergGluten || (hardHits.length && !ingrClaimsFree)){
+    if (allergGluten) reasons.push("Gluten ist als Allergen hinterlegt.");
+    if (hardHits.length) reasons.push("Glutenhaltige Zutat(en) gefunden: " + hardHits.slice(0,4).join(", ") + ".");
+    return {level:"red", title:"Enthält Gluten", text:"Bei Zöliakie nicht geeignet.", reasons};
+  }
+  if (traceGluten || softHits.length){
+    if (traceGluten) reasons.push("„Kann Spuren von Gluten enthalten“ ist hinterlegt.");
+    if (softHits.length) reasons.push("Enthält Hafer – nur als ausgewiesen glutenfreier Hafer für Zöliakie geeignet.");
+    reasons.push("Verpackung prüfen und im Zweifel meiden.");
+    return {level:"amber", title:"Vorsicht – möglich kontaminiert", text:"Spuren oder unklarer Hafer.", reasons};
+  }
+  if (ingr.length > 3){
+    reasons.push("In der Zutatenliste wurden keine glutenhaltigen Zutaten gefunden.");
+    reasons.push("Es gibt aber kein offizielles Glutenfrei-Label – eine Kontamination ist nicht ausgeschlossen.");
+    return {level:"amber", title:"Vermutlich glutenfrei – ohne Garantie", text:"Kein Label vorhanden, Zutatenliste auf der Verpackung prüfen.", reasons};
+  }
+  reasons.push("Für dieses Produkt liegen keine Zutaten- oder Allergendaten vor.");
+  reasons.push("Bitte die Zutatenliste auf der Verpackung lesen.");
+  return {level:"gray", title:"Keine Daten", text:"Einschätzung nicht möglich.", reasons};
+}
+
+/* ---------- Anzeige ---------- */
+const LEVEL_UI = {
+  green:{cls:"v-green", icon:"✓", dot:"#1E7F4C"},
+  amber:{cls:"v-amber", icon:"!", dot:"#B26A00"},
+  red:  {cls:"v-red",   icon:"✕", dot:"#BB2D2D"},
+  gray: {cls:"v-gray",  icon:"?", dot:"#5C6B62"}
+};
+
+let currentCarbs100 = null;
+
+function fmt(n, digits){
+  if (n === null || n === undefined || isNaN(n)) return null;
+  return Number(n).toLocaleString("de-DE",{maximumFractionDigits:digits===undefined?1:digits});
+}
+
+function showResult(code, p){
+  const verdict = evaluateGluten(p);
+  const ui = LEVEL_UI[verdict.level];
+
+  const v = $("verdict");
+  v.className = "verdict " + ui.cls;
+  $("verdict-icon").textContent = ui.icon;
+  $("verdict-title").textContent = verdict.title;
+  $("verdict-text").textContent = verdict.text;
+
+  $("p-name").textContent = p.product_name || "Unbenanntes Produkt";
+  $("p-brand").textContent = [p.brands, p.quantity].filter(Boolean).join(" · ");
+  $("p-code").textContent = "EAN " + code;
+  const img = $("p-img");
+  if (p.image_front_small_url){ img.src = p.image_front_small_url; img.hidden = false; } else { img.hidden = true; }
+
+  const ul = $("reasons");
+  ul.innerHTML = "";
+  verdict.reasons.forEach(r => { const li = document.createElement("li"); li.textContent = r; ul.appendChild(li); });
+
+  /* Nährwerttabelle */
+  const n = p.nutriments || {};
+  const rows = [
+    ["Energie", fmt(n["energy-kcal_100g"],0), "kcal", false, false],
+    ["Fett", fmt(n.fat_100g), "g", false, false],
+    ["Kohlenhydrate", fmt(n.carbohydrates_100g), "g", false, true],
+    ["davon Zucker", fmt(n.sugars_100g), "g", true, false],
+    ["Ballaststoffe", fmt(n.fiber_100g), "g", false, false],
+    ["Eiweiß", fmt(n.proteins_100g), "g", false, false],
+    ["Salz", fmt(n.salt_100g,2), "g", false, false]
+  ];
+  const table = $("nutri-table");
+  table.innerHTML = "";
+  let any = false;
+  rows.forEach(([label,val,unit,sub,hl])=>{
+    if (val === null) return;
+    any = true;
+    const tr = document.createElement("tr");
+    if (sub) tr.className = "sub";
+    if (hl) tr.className = "hl";
+    tr.innerHTML = "<td>"+label+"</td><td>"+val+" <span class='unit'>"+unit+"</span></td>";
+    table.appendChild(tr);
+  });
+  $("nutri-card").style.display = any ? "block" : "none";
+
+  /* Portionsrechner */
+  currentCarbs100 = (typeof n.carbohydrates_100g === "number") ? n.carbohydrates_100g : null;
+  $("portion-card").style.display = currentCarbs100 === null ? "none" : "block";
+  updatePortion();
+
+  $("result").style.display = "block";
+  setStatus("");
+  $("result").scrollIntoView({behavior:"smooth", block:"start"});
+
+  addHistory(code, p.product_name || code, verdict.level, p);
+}
+
+function updatePortion(){
+  if (currentCarbs100 === null) return;
+  const g = parseFloat($("portion-g").value) || 0;
+  const kh = currentCarbs100 * g / 100;
+  $("k-kh").textContent = fmt(kh);
+  $("k-be").textContent = fmt(kh/12);
+  $("k-ke").textContent = fmt(kh/10);
+}
+$("portion-g").addEventListener("input", updatePortion);
+
+/* ---------- Verlauf ---------- */
+function addHistory(code, name, level, product){
+  let h = load("esscheck_history", []);
+  h = h.filter(e => e.code !== code);
+  h.unshift({code, name, level, product, t: Date.now()});
+  h = h.slice(0, 15);
+  store("esscheck_history", h);
+  renderHistory();
+}
+function renderHistory(){
+  const h = load("esscheck_history", []);
+  const list = $("history-list");
+  if (!h.length){ list.innerHTML = "<div class='h-empty'>Noch keine Scans. Leg los!</div>"; return; }
+  list.innerHTML = "";
+  h.forEach(e=>{
+    const div = document.createElement("div");
+    div.className = "h-item";
+    const dot = LEVEL_UI[e.level] ? LEVEL_UI[e.level].dot : "#999";
+    div.innerHTML = "<div class='h-dot' style='background:"+dot+"'></div><div class='n'>"+
+      (e.name||e.code).replace(/</g,"&lt;")+"</div><div class='c'>"+e.code+"</div>";
+    div.addEventListener("click", ()=> showResult(e.code, e.product || {}));
+    list.appendChild(div);
+  });
+}
+renderHistory();
+
+/* ---------- Open Food Facts ---------- */
+async function lookup(code){
+  code = (code||"").replace(/\D/g,"");
+  if (code.length < 6){ setStatus("Bitte einen gültigen Barcode eingeben."); return; }
+  setStatus("Suche Produkt " + code + " …");
+  $("result").style.display = "none";
+  try{
+    const fields = "product_name,brands,quantity,allergens_tags,traces_tags,labels_tags,"+
+      "ingredients_text_de,ingredients_text,nutriments,image_front_small_url";
+    const res = await fetch("https://world.openfoodfacts.org/api/v2/product/"+code+"?fields="+fields);
+    const data = await res.json();
+    if (data.status !== 1 || !data.product){
+      setStatus("Produkt nicht in der Datenbank gefunden. Du kannst es unter openfoodfacts.org selbst ergänzen – dann hilft Dein Scan auch anderen.");
+      return;
+    }
+    showResult(code, data.product);
+  }catch(err){
+    setStatus("Verbindungsfehler – bitte Internetverbindung prüfen und erneut versuchen.");
+  }
+}
+
+$("btn-manual").addEventListener("click", ()=> lookup($("manual-code").value));
+$("manual-code").addEventListener("keydown", e => { if (e.key === "Enter") lookup(e.target.value); });
+
+/* ---------- Scanner ---------- */
+let scanner = null;
+let scanning = false;
+
+async function startScanner(){
+  if (scanning) return;
+  $("reader").style.display = "block";
+  $("btn-stop").style.display = "block";
+  $("btn-scan").textContent = "Kamera startet …";
+  try{
+    scanner = new Html5Qrcode("reader", {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128
+      ]
+    });
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 260, height: 140 } },
+      (decoded) => { stopScanner(); lookup(decoded); },
+      () => {} /* einzelne Fehlversuche ignorieren */
+    );
+    scanning = true;
+    $("btn-scan").textContent = "📷 Scanner läuft – Barcode in den Rahmen halten";
+  }catch(err){
+    $("reader").style.display = "none";
+    $("btn-stop").style.display = "none";
+    $("btn-scan").textContent = "📷 Barcode scannen";
+    setStatus("Kamera konnte nicht gestartet werden. Die Seite muss über HTTPS geöffnet sein und der Kamerazugriff erlaubt werden. Alternativ den Barcode unten eintippen.");
+  }
+}
+async function stopScanner(){
+  if (scanner && scanning){
+    try{ await scanner.stop(); scanner.clear(); }catch(e){}
+  }
+  scanning = false;
+  $("reader").style.display = "none";
+  $("btn-stop").style.display = "none";
+  $("btn-scan").textContent = "📷 Barcode scannen";
+}
+$("btn-scan").addEventListener("click", startScanner);
+$("btn-stop").addEventListener("click", stopScanner);
+
+})();
+</script>
+</body>
+</html>
