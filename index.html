@@ -441,21 +441,41 @@ async function startScanner(){
         Html5QrcodeSupportedFormats.UPC_A,
         Html5QrcodeSupportedFormats.UPC_E,
         Html5QrcodeSupportedFormats.CODE_128
-      ]
+      ],
+      /* nutzt – falls vom iPhone unterstützt – den nativen Barcode-Erkenner (deutlich treffsicherer) */
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      verbose: false
     });
     await scanner.start(
       { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 260, height: 140 } },
+      {
+        fps: 15,
+        qrbox: (vw, vh) => ({ width: Math.min(Math.floor(vw * 0.85), 340), height: 170 }),
+        aspectRatio: 1.333,
+        videoConstraints: {
+          facingMode: "environment",
+          width:  { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      },
       (decoded) => { stopScanner(); lookup(decoded); },
       () => {} /* einzelne Fehlversuche ignorieren */
     );
     scanning = true;
-    $("btn-scan").textContent = "📷 Scanner läuft – Barcode in den Rahmen halten";
+    $("btn-scan").textContent = "📷 Scanner läuft …";
+    setStatus("Barcode ruhig in den Rahmen halten, Abstand ca. 10–15 cm. Bei Unschärfe Abstand leicht verändern.");
   }catch(err){
     $("reader").style.display = "none";
     $("btn-stop").style.display = "none";
     $("btn-scan").textContent = "📷 Barcode scannen";
-    setStatus("Kamera konnte nicht gestartet werden. Die Seite muss über HTTPS geöffnet sein und der Kamerazugriff erlaubt werden. Alternativ den Barcode unten eintippen.");
+    const name = err && err.name ? err.name : "";
+    if (name === "NotAllowedError" || /permission|denied/i.test(String(err))){
+      setStatus("Der Kamerazugriff wurde blockiert. Bitte erlauben: In Safari auf „aA“ links in der Adressleiste tippen → „Website-Einstellungen“ → Kamera → „Erlauben“. Oder unter iOS-Einstellungen → Apps → Safari → Kamera → „Fragen“ wählen. Danach Seite neu laden.");
+    } else if (name === "NotFoundError"){
+      setStatus("Keine Kamera gefunden. Bitte den Barcode unten manuell eintippen.");
+    } else {
+      setStatus("Kamera konnte nicht gestartet werden ("+(name||err)+"). Die Seite muss über HTTPS laufen und der Kamerazugriff erlaubt sein. Alternativ den Barcode unten eintippen.");
+    }
   }
 }
 async function stopScanner(){
@@ -466,6 +486,7 @@ async function stopScanner(){
   $("reader").style.display = "none";
   $("btn-stop").style.display = "none";
   $("btn-scan").textContent = "📷 Barcode scannen";
+  setStatus("");
 }
 $("btn-scan").addEventListener("click", startScanner);
 $("btn-stop").addEventListener("click", stopScanner);
